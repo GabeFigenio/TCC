@@ -1,12 +1,9 @@
 //Inclues=======================================================
 #include <stdio.h>
 #include <driver/i2s.h>
-#include "model.h"
-#include <tflm_esp32.h>
-#include <eloquent_tinyml.h>
 #include "mic.h"
 #include <math.h>
-
+#include "Adafruit_ZeroFFT.h"
 
 //Defines=======================================================
 #define LED 15
@@ -16,39 +13,21 @@
 // Use I2S Processor 0
 #define I2S_PORT I2S_NUM_0
 
-#define ARENA_SIZE 10000
-
-Eloquent::TF::Sequential<TF_NUM_OPS, ARENA_SIZE> tf;
-
 
 //Variáveis====================================================
 int16_t sBuffer[bufferLen];
-int freq = 2500;
+int freq = 40000;
 int seg = 1;
 int janela = freq * seg;
 int cont = 0;
 long temp;
 long temp2 = 0;
 int rangelimit = 1;
-float audio[2500];
 bool botao = 0;
 bool antbotao = 0;
 float mean = 0;
 bool flag = 0;
-float trust = 0.89;
 
-
-double sumMean = 0;
-double sumAbsMean = 0;
-double rms = 0;
-double peak = 0;
-double crestFactor;
-double impulseFactor;
-double shapeFactor;
-double clearanceFactor = 0;
-double desvioPadrao = 0;
-double kurtosis = 0;
-double kurtosis2 = 0;
 
 
 //Funções======================================================
@@ -67,16 +46,6 @@ void setup()
 
   delay(500);
   
-  registerNetworkOps(tf);
-
-  while (!tf.begin(model).isOk()) 
-  {
-    Serial.println(tf.exception.toString());
-    delay(1000);
-  }
-
-  delay(500);
-  
   pinMode(LED, OUTPUT);
   pinMode(BUTTON, INPUT);
 
@@ -88,143 +57,109 @@ void setup()
 
 
 //Loop=========================================================
+// void loop() 
+// {
+
+//   botao = digitalRead(BUTTON);
+
+//   if(botao && !antbotao)
+//   {
+//     if(!flag)
+//     {
+//       delay(500);
+//       digitalWrite(LED, HIGH);
+//       delay(500);
+//       digitalWrite(LED, LOW);
+      
+//       delay(500);
+//       digitalWrite(LED, HIGH);
+//       delay(500);
+//       digitalWrite(LED, LOW);
+      
+//       delay(500);
+//       digitalWrite(LED, HIGH);
+//     }
+//     else
+//     {
+//       digitalWrite(LED, LOW);
+//     }
+
+//     flag = !flag;
+//   }
+//   antbotao = botao;
+    
+
+//   if(flag)
+//   {
+
+//     if(micros() - temp >= 1000000/freq)
+//     {
+
+//       temp = micros();
+      
+//       // Ler o microfone==========================================
+//       size_t bytesIn = 0;
+//       esp_err_t result = i2s_read(I2S_PORT, &sBuffer, bufferLen, &bytesIn, portMAX_DELAY);
+      
+//       if (result == ESP_OK)
+//       {
+//         // Read I2S data buffer
+//         int16_t samples_read = bytesIn / 8;
+//         if (samples_read > 0) 
+//         {
+          
+//           //Ler aúdio==========================================
+//           mean = 0;
+//           for (int16_t i = 0; i < samples_read; ++i) {
+//             mean += (sBuffer[i]);
+//           }
+//           mean /= samples_read;
+//           //Ler aúdio==========================================
+
+//           Serial.println(mean);
+          
+          
+//         }
+//       }
+//     }
+
+//   }
+
+// }
+
+
+//Adafruit 
+//Loop=========================================================
 void loop() 
 {
-  
-  if(micros() - temp >= 1000000/freq)
+  botao = digitalRead(BUTTON);
+
+  if(botao && !antbotao)
   {
-    temp = micros();
+    int16_t data[2048] = {0, 18571, 32587, 38961, 37032, 28694, 17639, 8028, 3032, 3792, 9123, 16071, 21087, 21387, 15991, 6077, -5459, -15086, -19927, -18816, -12714, -4361, 2705, 5412, 2230, -6296, -17750, -28676, -35742, -36808, -31554, -21451, -9158, 2439, 11163, 16142, 17882, 17837, 17686, 18607, 20827, 23596, 25567, 25403, 22352, 16576, 9114, 1504, -4753, -8697, -10161, -9730, -8416, -7232, -6828, -7340, -8479, -9804, -11018, -12135, -13444, -15269, -17656, -20140, -21744, -21240, -17611, -10527, -644, 10444, 20610, 27838, 30893, 29743, 25569, 20329, 16021, 13924, 14093, 15337, 15701, 13282, 7090, -2403, -13255, -22630, -27782, -27084, -20737, -10847, -813, 5786, 6439, 624, -9926, -21747, -30783, -33759, -29301, -18415, -4122, 9592, 19170, 22707, 20558, 15127, 9900, 8076, 11313, 19032, 28559, 36063, 37945, 32202, 19241, 1867, -15581, -28645, -34215, -31545, -22451, -10650, -456, 4680, 3294, -3690, -13408, -22151, -26708, -25479, -18954, -9428, -68, 6287, 8169, 5970, 1735, -1663, -1636, 3124, 12131, 23240, 33371, 39549, 39877, 34116, 23687, 11128, -779, -9868, -15161, -16968, -16534, -15415, -14836, -15276, -16418, -17432, -17444, -15980, -13192, -9786, -6710, -4727, -4095, -4455, -4996, -4808, -3264, -263, 3753, 8031, 11859, 14877, 17198, 19287, 21617, 24293, 26803, 28048, 26691, 21696, 12868, 1158, -11439, -22392, -29406, -31192, -27942, -21309, -13875, -8262, -6213, -7967, -12183, -16452, -18223, -15817, -9131, 235, 9511, 15761, 17013, 13078, 5734, -1814, -6049, -4432, 3592, 16253, 29935, 40330, 43872, 38965, 26548, 9813, -6860, -19356, -25176, -24198, -18593, -11925, -7783, -8428, -13953, -22262, -29867, -33208, -30022, -20248, -6137, 8470, 19451, 23826, 20795, 12009, 1002, -8030, -11653, -8340, 1067, 13715, 25759, 33681, 35433, 31008, 22280, 12204, 3688, -1426, -2929, -2164, -1368, -2706, -7376, -15104, -24212, -32215, -36701, -36173, -30555, -21177, -10304, -365, 6793, 10402, 10839, 9309, 7292, 5981, 5934, 7026, 8693, 10304, 11499, 12326, 13138, 14323, 15984, 17763, 18887, 18437, 15734, 10668, 3828, -3657, -10499, -15709, -18948, -20604, -21557, -22713, -24507, -26585, -27836, -26786, -22229, -13859, -2619, 9399, 19511, 25306, 25503, 20479, 12247, 3851, -1637, -2176, 2514, 10824, 19797, 26165, 27516, 23168, 14416, 4067, -4601, -9066, -8523, -4223, 968, 3638, 1154, -7256, -20054, -33779, -44158, -47557, -42266, -29151, -11446, 6281, 19611, 25702, 24166, 17091, 8210, 1526, -116, 3992, 12250, 21403, 27800, 28762, 23581, 13783, 2563, -6386, -10222, -7999, -1019, 7622, 14125, 15334, 9834, -1547, -16021, -29786, -39269, -42257, -38512, -29690, -18641, -8361, -989, 2794, 3793, 3779, 4660, 7668, 12870, 19167, 24756, 27840, 27330, 23244, 16695, 9470, 3399, -253, -1152, 110, 2331, 4197, 4742, 3605, 1011, -2474, -6280, -10079, -13853, -17740, -21760, -25578, -28429, -29291, -27247, -21905, -13688, -3840, 5878, 13725, 18559, 20212, 19529, 18002, 17161, 17915, 20140, 22678, 23779, 21835, 16126, 7278, -2777, -11379, -16052, -15444, -9938, -1657, 6157, 10219, 8355, 335, -11959, -25083, -35159, -39169, -35981, -26718, -14343, -2596, 5344, 7975, 5972, 1875, -923, 476, 7293, 18487, 31019, 40857, 44407, 39828, 27773, 11269, -5233, -17318, -22064, -18989, -10161, 563, 8895, 11591, 7518, -2033, -13900, -24229, -29858, -29397, -23636, -15150, -7263, -2780, -2939, -6972, -12419, -16063, -15147, -8411, 3399, 17747, 31132, 40236, 42978, 39116, 30210, 19001, 8443, 758, -3170, -3878, -2899, -2044, -2662, -5174, -9014, -12975, -15776, -16611, -15469, -13100, -10669, -9263, -9448, -11056, -13280, -15011, -15273, -13569, -10000, -5140, 271, 5652, 10773, 15725, 20690, 25626, 30040, 32979, 33289, 30071};
     
-    // Ler o microfone==========================================
-    size_t bytesIn = 0;
-    esp_err_t result = i2s_read(I2S_PORT, &sBuffer, bufferLen, &bytesIn, portMAX_DELAY);
+    // for(int i=0; i<256;i++)
+    // {
+    //   Serial.println(data[i]);
+    // }
     
-    if (result == ESP_OK)
-    {
-      // Read I2S data buffer
-      int16_t samples_read = bytesIn / 8;
-      if (samples_read > 0) 
-      {
-        
+    ZeroFFT(data, 2048);
 
-        if(cont == 0)
-        {
-          sumMean = 0;
-          sumAbsMean = 0;
-          rms = 0;
-          peak = 0;
-          clearanceFactor = 0;
-          desvioPadrao = 0;
-          kurtosis = 0;
-          kurtosis2 = 0;
-        }
-        
-        //Ler aúdio==========================================
-        mean = 0;
-        for (int16_t i = 0; i < samples_read; ++i) {
-          mean += (sBuffer[i]);
-        }
-        mean /= samples_read;
-        audio[cont] = mean;
-        //Ler aúdio==========================================
+    for(int i=0; i<2048/2; i++){
+      
+      //print the frequency
+      Serial.print(FFT_BIN(i, 2000, 2048));
+      Serial.print(" ");
 
-        
-        //Calcular algumas features==========================
-        if(fabs(audio[cont]) > peak)
-        {
-            peak = fabs(audio[cont]);
-        }
-        
-        sumMean += audio[cont];
-        sumAbsMean += fabs(audio[cont]);
-        rms += audio[cont]*audio[cont];
-        clearanceFactor += sqrt(fabs(audio[cont]));
-        //Calcular algumas features==========================
-        
-
-        //Quando a janela de áudio acabar====================
-        if(cont == janela)
-        {
-          temp2 = micros();
-
-          int tamanho = sizeof(audio)/sizeof(audio[0]);
-
-          //Calcular algumas features========================
-          sumMean /= tamanho;
-          for(int j=0; j<tamanho; j++)
-          {
-              desvioPadrao += (audio[j]-sumMean)*(audio[j]-sumMean);
-              kurtosis += (audio[j]-sumMean)*(audio[j]-sumMean);
-              kurtosis2 += (audio[j]-sumMean)*(audio[j]-sumMean)*(audio[j]-sumMean)*(audio[j]-sumMean);
-          }
-
-          kurtosis = (kurtosis/tamanho)*(kurtosis/tamanho);
-          kurtosis2 = kurtosis2/tamanho;
-          
-          kurtosis = kurtosis2/kurtosis;
-          
-          sumAbsMean /= tamanho;
-          
-          rms = sqrt(rms/tamanho);
-          crestFactor = peak/rms;
-          impulseFactor = peak/sumAbsMean;
-          shapeFactor = rms/sumAbsMean;
-          clearanceFactor = peak/((clearanceFactor/tamanho)*(clearanceFactor/tamanho));
-          desvioPadrao = sqrt(desvioPadrao/tamanho);
-          //Calcular algumas features========================
-        
-          
-          float entrada[8] = {crestFactor, rms, desvioPadrao, impulseFactor, shapeFactor, kurtosis, clearanceFactor, peak};
-          //float entrada[5] = {crestFactor, impulseFactor, shapeFactor, kurtosis, clearanceFactor};
-          //float entrada[1] = {crestFactor};
-
-          
-          if (!tf.predict(entrada).isOk())
-          {
-            Serial.println(tf.exception.toString());
-          }
-          
-          
-          float pred = tf.output(0);
-          if(pred > trust){
-            digitalWrite(LED, HIGH);
-          }
-          else
-          {
-            digitalWrite(LED, LOW);
-          }
-          /*
-          Serial.print("Cf: ");
-          Serial.print(crestFactor);
-          Serial.print("; RMS: ");
-          Serial.print(rms);
-          Serial.print("; Std: ");
-          Serial.print(desvioPadrao);
-          Serial.print("; Imp: ");
-          Serial.print(impulseFactor);
-          Serial.print("; Sf: ");
-          Serial.print(shapeFactor);
-          Serial.print("; Kur: ");
-          Serial.print(kurtosis);
-          Serial.print("; Clear: ");
-          Serial.print(clearanceFactor);
-          Serial.print("; Peak: ");
-          Serial.print(peak);
-         
-          Serial.print("Pred: "); */
-          Serial.print(0);
-          Serial.print(" ");
-          Serial.print(1);
-          Serial.print(" ");
-          Serial.print(trust);
-          Serial.print(" ");
-          Serial.println(pred);
-          
-          cont = -1;
-        }
-        //Quando a janela de áudio acabar====================
-      }
+      //print the corresponding FFT output
+      Serial.println(data[i]);
     }
-    cont++;
+
   }
+  
+  antbotao = botao;
 }
+
+
+
+
